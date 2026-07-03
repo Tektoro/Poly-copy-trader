@@ -176,7 +176,7 @@ async function recordDowntimeSinceLastHeartbeat(
   const sinceSec = Date.parse(last) / 1000;
   for (const l of cfg.leaders) {
     try {
-      const acts = await client.getActivityAll(l.wallet, 100);
+      const { records: acts } = await client.getActivityAll(l.wallet, { maxRecords: 100 });
       missed += acts.filter((a) => a.timestamp > sinceSec && a.timestamp <= startedAt.getTime() / 1000).length;
     } catch {
       /* best effort */

@@ -69,6 +69,7 @@ export interface RawActivity {
   price: number; // decimal 0..1
   title?: string;
   slug?: string;
+  eventSlug?: string;
   outcome?: string;
   type?: string;
 }
@@ -150,10 +151,68 @@ export class PolymarketClient {
     return this.getJson<RawActivity[]>(url);
   }
 
-  /** All activity types (TRADE, REDEEM, MERGE, SPLIT, …) for screening/history. */
-  async getActivityAll(wallet: string, limit = 500): Promise<RawActivity[]> {
-    const url = `${DATA_API}/activity?user=${wallet}&limit=${limit}`;
-    return this.getJson<RawActivity[]>(url);
+  /**
+   * All activity types (TRADE, REDEEM, MERGE, SPLIT, …) for screening/history.
+   * Paginates via `offset` (newest first) until the API runs dry or `maxRecords`
+   * is reached. Returns `{ records, truncated }` — when truncated, downstream
+   * stats like activity span are lower bounds, not the wallet's true history.
+   */
+  async getActivityAll(
+    wallet: string,
+    opts: { pageSize?: number; maxRecords?: number } = {},
+  ): Promise<{ records: RawActivity[]; truncated: boolean }> {
+    const pageSize = Math.min(opts.pageSize ?? 500, 500); // API max per page
+    const maxRecords = opts.maxRecords ?? 3000;
+    const records: RawActivity[] = [];
+    let offset = 0;
+    for (;;) {
+      const url = `${DATA_API}/activity?user=${wallet}&limit=${pageSize}&offset=${offset}`;
+      const page = await this.getJson<RawActivity[]>(url);
+      records.push(...page);
+      if (page.length < pageSize) return { records, truncated: false };
+      if (records.length >= maxRecords) return { records: records.slice(0, maxRecords), truncated: true };
+      offset += pageSize;
+    }
+  }
+
+  /**
+   * Market metadata for many condition ids in chunked batches (gamma accepts
+   * repeated `condition_ids` params). Missing markets are absent from the map.
+   */
+  async getMarketMetaBatch(conditionIds: string[]): Promise<Map<string, MarketMeta>> {
+    const out = new Map<string, MarketMeta>();
+    const ids = [...new Set(conditionIds)];
+    for (let i = 0; i < ids.length; i += 20) {
+      const chunk = ids.slice(i, i + 20);
+      const url = `${GAMMA_API}/markets?${chunk.map((id) => `condition_ids=${id}`).join("&")}`;
+      const arr = await this.getJson<RawMarket[]>(url).catch(() => [] as RawMarket[]);
+      for (const m of arr) {
+        const meta = toMarketMeta(m);
+        if (meta) out.set(meta.conditionId, meta);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Category per event slug, from the gamma events endpoint (first meaningful
+   * tag label, lowercased). The market object itself no longer carries a
+   * usable category, but every activity record has an `eventSlug`.
+   */
+  async getEventCategoryBatch(slugs: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const unique = [...new Set(slugs)].filter(Boolean);
+    for (let i = 0; i < unique.length; i += 20) {
+      const chunk = unique.slice(i, i + 20);
+      const url = `${GAMMA_API}/events?${chunk.map((s) => `slug=${encodeURIComponent(s)}`).join("&")}`;
+      const arr = await this.getJson<RawEvent[]>(url).catch(() => [] as RawEvent[]);
+      for (const e of arr) {
+        if (!e.slug) continue;
+        const cat = firstMeaningfulTag(e.tags);
+        if (cat) out.set(e.slug, cat.toLowerCase());
+      }
+    }
+    return out;
   }
 
   /** Open positions for a leader. */
@@ -175,17 +234,39 @@ export class PolymarketClient {
     const arr = await this.getJson<RawMarket[]>(url);
     const m = arr[0];
     if (!m) return null;
-    const outcomePrices = parseNumArray(m.outcomePrices);
-    return {
-      conditionId,
-      category: m.category ?? firstTag(m.tags) ?? null,
-      endDateIso: m.endDate ?? m.end_date_iso ?? null,
-      closed: Boolean(m.closed),
-      resolvedOutcomePrice: m.closed && outcomePrices.length > 0 ? outcomePrices[0]! : null,
-      tokenIds: parseStrArray(m.clobTokenIds),
-      outcomePrices,
-    };
+    return toMarketMeta(m, conditionId);
   }
+}
+
+function toMarketMeta(m: RawMarket, fallbackConditionId?: string): MarketMeta | null {
+  const id = m.conditionId ?? fallbackConditionId;
+  if (!id) return null;
+  const outcomePrices = parseNumArray(m.outcomePrices);
+  return {
+    conditionId: id,
+    category: m.category ?? firstTag(m.tags) ?? null,
+    endDateIso: m.endDate ?? m.end_date_iso ?? null,
+    closed: Boolean(m.closed),
+    resolvedOutcomePrice: m.closed && outcomePrices.length > 0 ? outcomePrices[0]! : null,
+    tokenIds: parseStrArray(m.clobTokenIds),
+    outcomePrices,
+  };
+}
+
+interface RawEvent {
+  slug?: string;
+  tags?: Array<{ label?: string; slug?: string }>;
+}
+
+/** Generic housekeeping tags that say nothing about the market's category. */
+const GENERIC_TAGS = new Set(["all", "hide from new", "recurring", "trending"]);
+
+function firstMeaningfulTag(tags: RawEvent["tags"]): string | null {
+  for (const t of tags ?? []) {
+    const label = t.label ?? t.slug;
+    if (label && !GENERIC_TAGS.has(label.toLowerCase())) return label;
+  }
+  return null;
 }
 
 interface RawBook {
@@ -194,6 +275,7 @@ interface RawBook {
 }
 
 interface RawMarket {
+  conditionId?: string;
   category?: string | null;
   tags?: unknown;
   endDate?: string | null;
