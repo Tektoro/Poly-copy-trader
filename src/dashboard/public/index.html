@@ -181,7 +181,11 @@
       $("signoff").addEventListener("change", (e) =>
         j("/api/signoff", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ value: e.target.checked }) }));
 
-      if (window.Notification && Notification.permission === "default") Notification.requestPermission();
+      // Ask for notification permission on first interaction, not on load —
+      // un-prompted requests are ignored by modern browsers and block automation.
+      document.addEventListener("click", () => {
+        if (window.Notification && Notification.permission === "default") Notification.requestPermission();
+      }, { once: true });
       refresh();
       setInterval(refresh, 30_000);
     </script>
