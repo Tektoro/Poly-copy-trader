@@ -1,0 +1,39 @@
+{
+  "mode": "paper",
+  "leaders": [
+    {
+      "wallet": "0x0000000000000000000000000000000000000000",
+      "label": "EXAMPLE",
+      "allowedCategories": ["sports"],
+      "addedAt": "2026-07-03T00:00:00Z",
+      "reason": "Placeholder. Replace with a real wallet vetted via `npm run screen`."
+    }
+  ],
+  "filters": {
+    "maxEntryPriceCents": 60,
+    "minLeaderTradeUsd": 500,
+    "maxPriceChaseCents": 3,
+    "minMinutesToResolution": 60
+  },
+  "sizing": {
+    "notionalPerPositionUsd": 100,
+    "maxConcurrentPositions": 20,
+    "maxTotalExposureUsd": 2000
+  },
+  "fees": {
+    "takerFeeBps": 0,
+    "note": "Polymarket introduced market-type-specific taker fees in 2026. Verify the CURRENT schedule at build time and set bps per market type before the measurement run. 0 = no fee applied to simulated P&L."
+  },
+  "gates": {
+    "minFilledPositions": 30,
+    "meanEdgeCaptureCentsMin": -3,
+    "medianEdgeCaptureCentsMin": -2,
+    "leaderPnlCaptureRatioMin": 0.5,
+    "latencyMedianSecMax": 5,
+    "latencyP95SecMax": 15
+  },
+  "polling": {
+    "leaderActivityIntervalMs": 1000,
+    "globalMaxReqPerSec": 10
+  }
+}

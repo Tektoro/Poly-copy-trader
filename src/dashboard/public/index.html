@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Polymarket Paper Bot — Dashboard</title>
+    <!-- Chart.js via CDN only (spec constraint: no chart lib in package.json). -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+        --muted: #8b949e; --good: #3fb950; --bad: #f85149; --warn: #d29922; --accent: #58a6ff;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+      header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+      header h1 { font-size: 16px; margin: 0; }
+      .paper-badge { background: #1f6feb33; color: var(--accent); border: 1px solid var(--accent); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+      #banner { display: none; background: var(--bad); color: #fff; padding: 8px 20px; font-weight: 600; }
+      #banner.show { display: block; }
+      .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 16px; }
+      .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; min-height: 120px; }
+      .panel.full { grid-column: 1 / -1; }
+      .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+      th { color: var(--muted); font-weight: 600; }
+      .scroll { overflow-x: auto; }
+      .pos { color: var(--good); } .neg { color: var(--bad); } .muted { color: var(--muted); }
+      .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+      .dot.up { background: var(--good); } .dot.down { background: var(--bad); } .dot.warn { background: var(--warn); }
+      .cards { display: flex; flex-wrap: wrap; gap: 10px; }
+      .card { border: 1px solid var(--border); border-radius: 6px; padding: 10px; min-width: 150px; }
+      .gate { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+      .gate .val { font-variant-numeric: tabular-nums; }
+      .foot { padding: 8px 20px; color: var(--muted); font-size: 12px; }
+      canvas { max-height: 260px; }
+      label.signoff { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Polymarket Copy-Trading</h1>
+      <span class="paper-badge">PAPER — no real orders</span>
+      <span id="clock" class="muted"></span>
+    </header>
+    <div id="banner"></div>
+
+    <div class="grid">
+      <section class="panel"><h2>1 · Health</h2><div id="health"></div></section>
+      <section class="panel"><h2>2 · Detection latency</h2><canvas id="latencyChart"></canvas></section>
+      <section class="panel full"><h2>3 · Leaders</h2><div id="leaders" class="cards"></div></section>
+      <section class="panel full"><h2>4 · Signals &amp; open positions</h2>
+        <div class="scroll"><table id="signalsTable"></table></div>
+        <h3 style="font-size:12px;color:var(--muted)">Open positions</h3>
+        <div class="scroll"><table id="openTable"></table></div>
+      </section>
+      <section class="panel full"><h2>5 · Edge capture (headline)</h2><canvas id="edgeChart"></canvas></section>
+      <section class="panel full"><h2>6 · Go / no-go tracker</h2><div id="gates"></div>
+        <label class="signoff"><input type="checkbox" id="signoff" /> Counsel sign-off received</label>
+      </section>
+    </div>
+    <div class="foot">Auto-refreshes every 30s · localhost only · edge capture = leaderFill − simFill (BUY) / simFill − leaderFill (SELL); positive = we did better.</div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let latencyChart, edgeChart;
+
+      async function j(url, opts) { const r = await fetch(url, opts); return r.json(); }
+      const cents = (v) => v === null || v === undefined ? "—" : (v >= 0 ? "+" : "") + v.toFixed(2) + "¢";
+      const usd = (v) => v === null || v === undefined ? "—" : "$" + Number(v).toFixed(2);
+      const cls = (v) => v > 0 ? "pos" : v < 0 ? "neg" : "muted";
+
+      function setBanner(msgs) {
+        const b = $("banner");
+        if (msgs.length) { b.textContent = "⚠ " + msgs.join("  ·  "); b.classList.add("show");
+          if (Notification && Notification.permission === "granted") new Notification(msgs[0]); }
+        else b.classList.remove("show");
+      }
+
+      async function refresh() {
+        $("clock").textContent = new Date().toISOString();
+        const alerts = [];
+        try {
+          const h = await j("/api/health");
+          renderHealth(h, alerts);
+          renderLatency(await j("/api/latency"));
+          renderLeaders(await j("/api/leaders"), alerts);
+          renderSignals(await j("/api/signals"));
+          renderEdge(await j("/api/edge"), alerts);
+          renderGates(await j("/api/gates"));
+        } catch (e) { alerts.push("dashboard fetch error: " + e.message); }
+        setBanner(alerts);
+      }
+
+      function renderHealth(h, alerts) {
+        const rows = h.pollers.map((p) => {
+          const age = p.lastEventAgeSec;
+          const down = age !== null && age > 300;
+          if (down) alerts.push(`poller ${p.label} silent ${Math.round(age)}s`);
+          return `<tr><td><span class="dot ${down ? "down" : "up"}"></span>${p.label}</td>
+            <td class="muted">${p.lastEventTs ?? "no events yet"}</td></tr>`;
+        }).join("");
+        const c = h.chain;
+        $("health").innerHTML =
+          `<table>${rows}</table>
+           <p class="muted">Uptime ${Math.round(h.uptimeSec)}s · errors ${h.errorCount} · 429s ${h.rateLimitedCount}</p>
+           <p>Chain listener: ${c.enabled ? (c.connected ? '<span class="pos">connected</span>' : '<span class="neg">disconnected</span>') : '<span class="muted">disabled (no RPC)</span>'} · OrderFilled ${c.orderFilledCount} · merges ${c.mergeCount}</p>
+           <p class="muted">Downtime rows: ${h.downtime.length}</p>`;
+      }
+
+      function renderLatency(data) {
+        const buckets = [0, 1, 2, 3, 5, 8, 12, 20, 40];
+        const counts = new Array(buckets.length).fill(0);
+        data.forEach((d) => { let i = buckets.findIndex((b, k) => d.latencyS < (buckets[k + 1] ?? Infinity)); if (i < 0) i = buckets.length - 1; counts[i]++; });
+        const labels = buckets.map((b, k) => buckets[k + 1] ? `${b}-${buckets[k + 1]}s` : `${b}s+`);
+        const ds = { labels, datasets: [{ label: "detections", data: counts, backgroundColor: "#58a6ff" }] };
+        if (!latencyChart) latencyChart = new Chart($("latencyChart"), { type: "bar", data: ds,
+          options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: "#8b949e" } }, y: { ticks: { color: "#8b949e" } } } } });
+        else { latencyChart.data = ds; latencyChart.update(); }
+      }
+
+      function renderLeaders(rows, alerts) {
+        $("leaders").innerHTML = rows.map((l) => {
+          if (l.daysSinceLastTrade !== null && l.daysSinceLastTrade > 3) alerts.push(`leader ${l.label} dark ${l.daysSinceLastTrade.toFixed(1)}d`);
+          return `<div class="card">
+            <b>${l.label}</b> ${l.decayFlag ? '<span class="neg">⚠ decay</span>' : ''}<br>
+            <span class="muted">${l.categories.join(", ")}</span><br>
+            trades 7d: ${l.trades7d}<br>
+            30d P&L: <span class="${cls(l.pnl30d)}">${usd(l.pnl30d)}</span><br>
+            since last: ${l.daysSinceLastTrade === null ? "—" : l.daysSinceLastTrade.toFixed(1) + "d"}<br>
+            rolling edge: <span class="${l.rollingEdgeCents === null ? "muted" : cls(l.rollingEdgeCents)}">${cents(l.rollingEdgeCents)}</span>
+          </div>`;
+        }).join("") || '<span class="muted">No leaders configured.</span>';
+      }
+
+      function renderSignals({ signals, open }) {
+        $("signalsTable").innerHTML =
+          `<tr><th>time</th><th>leader</th><th>side</th><th>price</th><th>size</th><th>status</th><th>reason</th></tr>` +
+          signals.slice(0, 40).map((s) => `<tr>
+            <td class="muted">${s.detected_ts.slice(11, 19)}</td><td>${s.wallet.slice(0, 8)}…</td>
+            <td>${s.side}</td><td>${s.leader_price_cents}¢</td><td>${usd(s.leader_size_usd)}</td>
+            <td>${s.status}</td><td class="muted">${s.skip_reason ?? ""}</td></tr>`).join("");
+        $("openTable").innerHTML = open.length
+          ? `<tr><th>token</th><th>fill</th><th>usd</th><th>edge</th><th>opened</th></tr>` +
+            open.map((p) => `<tr><td>${String(p.token_id).slice(0, 10)}…</td><td>${p.sim_fill_cents.toFixed(2)}¢</td>
+              <td>${usd(p.filled_usd)}</td><td class="${cls(p.edge_capture_cents)}">${cents(p.edge_capture_cents)}</td>
+              <td class="muted">${p.opened_ts.slice(0, 19)}</td></tr>`).join("")
+          : '<tr><td class="muted">No open positions.</td></tr>';
+      }
+
+      function renderEdge(rows, alerts) {
+        const pts = rows.map((r) => ({ x: r.openedTs, y: r.edgeCents }));
+        const last20 = rows.slice(-20).map((r) => r.edgeCents);
+        if (last20.length >= 20) { const m = last20.reduce((a, b) => a + b, 0) / 20; if (m < -3) alerts.push(`rolling-20 mean edge ${m.toFixed(1)}¢`); }
+        const ds = { datasets: [
+          { label: "edge capture", data: pts, backgroundColor: pts.map((p) => p.y >= 0 ? "#3fb950" : "#f85149"), pointRadius: 4 },
+        ] };
+        const gate = (y, color) => ({ label: y + "¢ gate", data: pts.map((p) => ({ x: p.x, y })), type: "line", borderColor: color, borderDash: [5, 5], pointRadius: 0, borderWidth: 1 });
+        if (pts.length) { ds.datasets.push(gate(-2, "#d29922"), gate(-3, "#f85149")); }
+        if (!edgeChart) edgeChart = new Chart($("edgeChart"), { type: "scatter", data: ds,
+          options: { plugins: { legend: { labels: { color: "#8b949e" } } },
+            scales: { x: { type: "category", ticks: { color: "#8b949e", maxTicksLimit: 8 } }, y: { title: { display: true, text: "cents", color: "#8b949e" }, ticks: { color: "#8b949e" } } } } });
+        else { edgeChart.data = ds; edgeChart.update(); }
+      }
+
+      function renderGates(d) {
+        const g = d.gates, p = d.progress;
+        const row = (label, val, ok) => `<div class="gate"><span>${label}</span><span class="val ${ok ? "pos" : "neg"}">${val} ${ok ? "✓" : "✗"}</span></div>`;
+        const num = (v) => v === null ? "—" : v.toFixed(2);
+        $("gates").innerHTML =
+          row(`Filled positions ≥ ${g.minFilledPositions}`, `${p.filledPositions}`, p.filledPositions >= g.minFilledPositions) +
+          row(`Mean edge ≥ ${g.meanEdgeCaptureCentsMin}¢`, `${num(p.meanEdgeCents)}¢`, p.meanEdgeCents !== null && p.meanEdgeCents >= g.meanEdgeCaptureCentsMin) +
+          row(`Median edge ≥ ${g.medianEdgeCaptureCentsMin}¢`, `${num(p.medianEdgeCents)}¢`, p.medianEdgeCents !== null && p.medianEdgeCents >= g.medianEdgeCaptureCentsMin) +
+          row(`Capture ratio ≥ ${g.leaderPnlCaptureRatioMin}`, `${num(p.leaderPnlCaptureRatio)}`, p.leaderPnlCaptureRatio !== null && p.leaderPnlCaptureRatio >= g.leaderPnlCaptureRatioMin) +
+          row(`Median latency ≤ ${g.latencyMedianSecMax}s`, `${num(p.medianLatencyS)}s`, p.medianLatencyS !== null && p.medianLatencyS <= g.latencyMedianSecMax) +
+          row(`P95 latency ≤ ${g.latencyP95SecMax}s`, `${num(p.p95LatencyS)}s`, p.p95LatencyS !== null && p.p95LatencyS <= g.latencyP95SecMax);
+        $("signoff").checked = p.counselSignoff;
+      }
+
+      $("signoff").addEventListener("change", (e) =>
+        j("/api/signoff", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ value: e.target.checked }) }));
+
+      if (window.Notification && Notification.permission === "default") Notification.requestPermission();
+      refresh();
+      setInterval(refresh, 30_000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "wallet": "0x1111111111111111111111111111111111111111",
+  "activity": [
+    { "transactionHash": "0xA", "timestamp": 1751500000, "conditionId": "C1", "asset": "T1", "side": "BUY", "size": 2000, "usdcSize": 1000, "price": 0.5, "type": "TRADE" },
+    { "transactionHash": "0xB", "timestamp": 1751500100, "conditionId": "C1", "asset": "T1", "side": "BUY", "size": 200, "usdcSize": 100, "price": 0.5, "type": "TRADE" },
+    { "transactionHash": "0xC", "timestamp": 1751500200, "conditionId": "C2", "asset": "T2", "side": "BUY", "size": 1428, "usdcSize": 1000, "price": 0.7, "type": "TRADE" },
+    { "transactionHash": "0xD", "timestamp": 1751500300, "conditionId": "C3", "asset": "T3", "side": "BUY", "size": 2500, "usdcSize": 1000, "price": 0.4, "type": "TRADE" },
+    { "transactionHash": "0xE", "timestamp": 1751500400, "conditionId": "C1", "asset": "T1", "side": "SELL", "size": 1818, "usdcSize": 1000, "price": 0.55, "type": "TRADE" }
+  ],
+  "books": {
+    "T1": { "asks": [{ "price": "0.51", "size": "2000" }, { "price": "0.53", "size": "5000" }], "bids": [{ "price": "0.54", "size": "3000" }, { "price": "0.52", "size": "4000" }] },
+    "T2": { "asks": [{ "price": "0.72", "size": "1000" }], "bids": [{ "price": "0.68", "size": "1000" }] },
+    "T3": { "asks": [{ "price": "0.41", "size": "1000" }], "bids": [{ "price": "0.39", "size": "1000" }] }
+  },
+  "markets": {
+    "C1": { "category": "sports", "endDate": "2026-12-31T00:00:00Z", "closed": false, "outcomePrices": "[\"0.5\",\"0.5\"]", "clobTokenIds": "[\"T1\",\"T1NO\"]" },
+    "C2": { "category": "sports", "endDate": "2026-12-31T00:00:00Z", "closed": false, "outcomePrices": "[\"0.5\",\"0.5\"]", "clobTokenIds": "[\"T2\",\"T2NO\"]" },
+    "C3": { "category": "politics", "endDate": "2026-12-31T00:00:00Z", "closed": false, "outcomePrices": "[\"0.5\",\"0.5\"]", "clobTokenIds": "[\"T3\",\"T3NO\"]" }
+  }
+}
