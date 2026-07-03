@@ -184,11 +184,16 @@ export class PolymarketClient {
     const ids = [...new Set(conditionIds)];
     for (let i = 0; i < ids.length; i += 20) {
       const chunk = ids.slice(i, i + 20);
-      const url = `${GAMMA_API}/markets?${chunk.map((id) => `condition_ids=${id}`).join("&")}`;
-      const arr = await this.getJson<RawMarket[]>(url).catch(() => [] as RawMarket[]);
-      for (const m of arr) {
-        const meta = toMarketMeta(m);
-        if (meta) out.set(meta.conditionId, meta);
+      const params = chunk.map((id) => `condition_ids=${id}`).join("&");
+      // Gamma filters out closed markets unless closed=true is passed, so a
+      // single query silently drops resolved markets — query both and merge.
+      for (const extra of ["", "&closed=true"]) {
+        const url = `${GAMMA_API}/markets?${params}${extra}`;
+        const arr = await this.getJson<RawMarket[]>(url).catch(() => [] as RawMarket[]);
+        for (const m of arr) {
+          const meta = toMarketMeta(m);
+          if (meta) out.set(meta.conditionId, meta);
+        }
       }
     }
     return out;
@@ -230,9 +235,13 @@ export class PolymarketClient {
 
   /** Market metadata by condition id (category, resolution, end date). */
   async getMarketMeta(conditionId: string): Promise<MarketMeta | null> {
-    const url = `${GAMMA_API}/markets?condition_ids=${conditionId}`;
-    const arr = await this.getJson<RawMarket[]>(url);
-    const m = arr[0];
+    // Gamma omits closed markets from the default listing, so a market that
+    // resolves after we open a position would vanish from the plain query and
+    // resolution would never be detected — check the closed listing too.
+    const openArr = await this.getJson<RawMarket[]>(`${GAMMA_API}/markets?condition_ids=${conditionId}`);
+    const m =
+      openArr[0] ??
+      (await this.getJson<RawMarket[]>(`${GAMMA_API}/markets?condition_ids=${conditionId}&closed=true`))[0];
     if (!m) return null;
     return toMarketMeta(m, conditionId);
   }
