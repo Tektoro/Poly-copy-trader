@@ -1,0 +1,13 @@
+# Normalize all text files to LF in the repo; checkout as LF too (tsx, vitest,
+# Docker, and CI are all LF-friendly, and this silences CRLF warnings on Windows).
+* text=auto eol=lf
+
+# Windows batch files need CRLF to run correctly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary — never touch line endings.
+*.db binary
+*.png binary
+*.jpg binary
+*.ico binary
