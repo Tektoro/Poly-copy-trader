@@ -88,7 +88,7 @@ async function rollUpMarkets(client: PolymarketClient, activity: RawActivity[]):
   return [...byCondition.values()];
 }
 
-function summarize(rolls: MarketRoll[], activity: RawActivity[]): { categories: CategoryStat[]; overall: CategoryStat; maxTradesPerDay: number; spanDays: number } {
+function summarize(rolls: MarketRoll[], activity: RawActivity[]): { categories: CategoryStat[]; overall: CategoryStat; maxTradesPerDay: number; spanDays: number; lastTradeDaysAgo: number } {
   const byCat = new Map<string, CategoryStat>();
   let firstTs = Number.POSITIVE_INFINITY;
   let lastTs = 0;
@@ -136,7 +136,9 @@ function summarize(rolls: MarketRoll[], activity: RawActivity[]): { categories: 
     perDay.set(day, (perDay.get(day) ?? 0) + 1);
   }
   const maxTradesPerDay = Math.max(0, ...perDay.values());
-  return { categories, overall, maxTradesPerDay, spanDays: round2(spanDays) };
+  const newestTradeSec = Math.max(0, ...activity.filter((a) => (a.type ?? "TRADE").toUpperCase() === "TRADE").map((a) => a.timestamp));
+  const lastTradeDaysAgo = newestTradeSec > 0 ? (Date.now() / 1000 - newestTradeSec) / 86_400 : Number.POSITIVE_INFINITY;
+  return { categories, overall, maxTradesPerDay, spanDays: round2(spanDays), lastTradeDaysAgo: round2(lastTradeDaysAgo) };
 }
 
 function verdict(s: ReturnType<typeof summarize>, truncated: boolean): { include: boolean; reasons: string[]; recommended: string[]; notes: string[] } {
@@ -156,6 +158,12 @@ function verdict(s: ReturnType<typeof summarize>, truncated: boolean): { include
     }
   }
   if (botFlag) reasons.push(`bot-flagged (${s.maxTradesPerDay} trades in a day)`);
+  // A leader who has gone dark produces no signals to copy — the dashboard
+  // decay-flags at 72h; screening uses a slightly more forgiving 7 days.
+  if (s.lastTradeDaysAgo > 7) reasons.push(`last trade ${s.lastTradeDaysAgo.toFixed(0)}d ago (inactive >7d)`);
+  // Leaderboard rank can be recent variance on top of long-term losses;
+  // copying a net loser is disqualifying regardless of the other criteria.
+  if (s.overall.realizedPnlUsd < 0) reasons.push(`negative overall realized P&L ($${s.overall.realizedPnlUsd})`);
   const recommended = s.categories
     .filter((c) => c.realizedPnlUsd > 0 && c.resolvedPositions >= 2 && c.category !== "unknown")
     .map((c) => c.category);
@@ -171,7 +179,7 @@ async function screenWallet(client: PolymarketClient, wallet: string, maxRecords
   const line = "─".repeat(78);
   console.log(`\n${line}\nSCREENING REPORT — ${wallet}\n${line}`);
   console.log(
-    `Activity records: ${activity.length}${truncated ? ` (TRUNCATED at cap — use --max to raise)` : ""} · markets touched: ${rolls.length} · span: ${summary.spanDays}d · max trades/day: ${summary.maxTradesPerDay}`,
+    `Activity records: ${activity.length}${truncated ? ` (TRUNCATED at cap — use --max to raise)` : ""} · markets touched: ${rolls.length} · span: ${summary.spanDays}d · max trades/day: ${summary.maxTradesPerDay} · last trade: ${Number.isFinite(summary.lastTradeDaysAgo) ? summary.lastTradeDaysAgo.toFixed(1) + "d ago" : "never"}`,
   );
   console.log(`\nPer-category (realized cash-flow P&L, includes merges/splits/redeems):`);
   console.log(pad("category", 14) + pad("resolved", 10) + pad("staked$", 12) + pad("avgEntry", 10) + pad("winRate", 10) + "realizedP&L$");

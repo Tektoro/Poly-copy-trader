@@ -2,11 +2,11 @@
   "mode": "paper",
   "leaders": [
     {
-      "wallet": "0x0000000000000000000000000000000000000000",
-      "label": "EXAMPLE",
+      "wallet": "0xa6a872ded6039c17a9e5c81b706c04e76fbeba32",
+      "label": "eyeseethefuture",
       "allowedCategories": ["sports"],
-      "addedAt": "2026-07-03T00:00:00Z",
-      "reason": "Placeholder. Replace with a real wallet vetted via `npm run screen`."
+      "addedAt": "2026-07-03T13:55:00Z",
+      "reason": "Screened 2026-07-03: active same-day, 241d span, human-paced (max 172 trades/day). Sports: 10 resolved, 90% win rate, $360k staked, +$106k realized (merge-aware), 37.4¢ avg entry. Overall +$68k. #41 on 30d profit leaderboard. Verdict: INCLUDE, categories [sports]. Watchlist: Oneger 0xe9a6ed2e4d4ee8ce47cd47cac834746dc4cf627b (strong but only 20d old — re-screen ~2026-09-01); primm 0xd38b71f3e8ed1af71983e5c309eac3dfa9b35029 (excellent history, dark since 2026-04-05 — re-screen when NCAA season resumes)."
     }
   ],
   "filters": {
