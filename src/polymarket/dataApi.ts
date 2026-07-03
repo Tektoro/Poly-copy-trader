@@ -167,7 +167,18 @@ export class PolymarketClient {
     let offset = 0;
     for (;;) {
       const url = `${DATA_API}/activity?user=${wallet}&limit=${pageSize}&offset=${offset}`;
-      const page = await this.getJson<RawActivity[]>(url);
+      let page: RawActivity[];
+      try {
+        page = await this.getJson<RawActivity[]>(url);
+      } catch (err) {
+        // The API rejects deep pagination (400 past offset ~3000). Treat a
+        // failure after the first page as "no more history available".
+        if (offset > 0) {
+          this.log.warn({ event: "activity_pagination_capped", wallet, offset, err: String(err) });
+          return { records, truncated: true };
+        }
+        throw err;
+      }
       records.push(...page);
       if (page.length < pageSize) return { records, truncated: false };
       if (records.length >= maxRecords) return { records: records.slice(0, maxRecords), truncated: true };

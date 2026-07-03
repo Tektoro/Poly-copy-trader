@@ -6,8 +6,26 @@
       "label": "eyeseethefuture",
       "allowedCategories": ["sports"],
       "addedAt": "2026-07-03T13:55:00Z",
-      "reason": "Screened 2026-07-03: active same-day, 241d span, human-paced (max 172 trades/day). Sports: 10 resolved, 90% win rate, $360k staked, +$106k realized (merge-aware), 37.4¢ avg entry. Overall +$68k. #41 on 30d profit leaderboard. Verdict: INCLUDE, categories [sports]. Watchlist: Oneger 0xe9a6ed2e4d4ee8ce47cd47cac834746dc4cf627b (strong but only 20d old — re-screen ~2026-09-01); primm 0xd38b71f3e8ed1af71983e5c309eac3dfa9b35029 (excellent history, dark since 2026-04-05 — re-screen when NCAA season resumes)."
+      "reason": "Screened 2026-07-03: active same-day, 241d span, human-paced (max 172 trades/day). Sports: 10 resolved, 90% win rate, $360k staked, +$106k realized (merge-aware), 37.4¢ avg entry. Overall +$68k. #41 on 30d profit board. Verdict: INCLUDE [sports]."
+    },
+    {
+      "wallet": "0xf0726b6a29afdfd3c193aa5540df16b0175d467a",
+      "label": "Palauanbull",
+      "allowedCategories": ["sports"],
+      "addedAt": "2026-07-03T14:40:00Z",
+      "reason": "Screened 2026-07-03: active 0.6d ago, 195d span, most copyable pace of the pool (max 40 trades/day, median trade $1,021). Sports: 52 resolved, 56% win rate, $300k staked, +$56k realized, 49.5¢ avg entry. Verdict: INCLUDE [sports]."
+    },
+    {
+      "wallet": "0xa49becb692927d455924583b5e3e5788246f4c40",
+      "label": "sleepy-panda",
+      "allowedCategories": ["sports"],
+      "addedAt": "2026-07-03T14:40:00Z",
+      "reason": "Screened 2026-07-03: active 0.3d ago. Sports: 67 resolved, 64% win rate, $4.1M staked, +$129k realized, 42.4¢ avg entry. CAUTION: fast (max 464 trades/day, near the 500 bot bar) and history truncated at API pagination cap (span >=18d) — edge capture will reveal if they are copyable; drop if rolling edge < -3c. Verdict: INCLUDE [sports]."
     }
+  ],
+  "watchlist_not_active_leaders": [
+    { "wallet": "0xe9a6ed2e4d4ee8ce47cd47cac834746dc4cf627b", "label": "Oneger", "note": "Rank #4. Passes everything except age (20d < 3mo). 86 resolved, 56% win, +$776k realized, median trade $5k. Re-screen ~2026-09-01." },
+    { "wallet": "0xd38b71f3e8ed1af71983e5c309eac3dfa9b35029", "label": "primm", "note": "Rank #5. 563 resolved / 50% win / +$2.67M over 225d but seasonal (NCAA) — dark since 2026-04-05. Re-screen when college basketball resumes (~Nov 2026)." }
   ],
   "filters": {
     "maxEntryPriceCents": 60,
