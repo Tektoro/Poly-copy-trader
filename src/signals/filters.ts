@@ -18,8 +18,10 @@ export function evaluateEntry(
   portfolio: PortfolioState,
 ): FilterResult {
   // Category must be in the leader's allow-list. Unknown category (null) is rejected
-  // rather than assumed safe.
-  if (trade.category === null || !allowedCategories.includes(trade.category)) {
+  // rather than assumed safe. Case-insensitive: gamma tags are Title Case
+  // ("Sports") while configs conventionally use lowercase.
+  const category = trade.category?.toLowerCase() ?? null;
+  if (category === null || !allowedCategories.some((c) => c.toLowerCase() === category)) {
     return { accept: false, reason: "category_not_allowed" };
   }
 

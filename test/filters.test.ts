@@ -43,6 +43,11 @@ describe("evaluateEntry (§4)", () => {
     expect(r).toEqual({ accept: false, reason: "category_not_allowed" });
   });
 
+  it("matches categories case-insensitively (gamma tags are Title Case)", () => {
+    expect(evaluateEntry(trade({ category: "Sports" }), ["sports"], cfg, portfolio())).toEqual({ accept: true });
+    expect(evaluateEntry(trade({ category: "sports" }), ["Sports"], cfg, portfolio())).toEqual({ accept: true });
+  });
+
   it("rejects entry price above the cap", () => {
     const r = evaluateEntry(trade({ priceCents: 61 }), ["sports"], cfg, portfolio());
     expect(r).toEqual({ accept: false, reason: "entry_price_too_high" });

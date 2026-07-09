@@ -34,6 +34,8 @@ export class ActivityPoller {
   private lastSeenMs = new Map<string, number>(); // wallet -> max leaderTs seen (ms)
   private primed = new Set<string>();
   private readonly metaCache = new Map<string, MetaCacheEntry>();
+  // eventSlug -> category. Slugs never change category; cache for the process lifetime.
+  private readonly eventCategoryCache = new Map<string, string | null>();
   private stopped = false;
 
   constructor(
@@ -112,12 +114,15 @@ export class ActivityPoller {
     const minutesToResolution = meta?.endDateIso
       ? Math.round((Date.parse(meta.endDateIso) - this.deps.now().getTime()) / 60_000)
       : null;
+    // Category lives on the event's tags, not the market object (gamma dropped
+    // the market-level category) — same resolution the screener uses.
+    const eventCategory = a.eventSlug ? await this.getEventCategory(a.eventSlug) : null;
     return {
       wallet: leader.wallet,
       label: leader.label,
       marketId: a.conditionId,
       tokenId: a.asset,
-      category: meta?.category ?? null,
+      category: eventCategory ?? meta?.category?.toLowerCase() ?? null,
       side: normalizeSide(a.side),
       priceCents: toCents(a.price),
       sizeUsd: a.usdcSize,
@@ -127,6 +132,19 @@ export class ActivityPoller {
       txHash: a.transactionHash,
       minutesToResolution,
     };
+  }
+
+  private async getEventCategory(eventSlug: string): Promise<string | null> {
+    if (this.eventCategoryCache.has(eventSlug)) return this.eventCategoryCache.get(eventSlug)!;
+    try {
+      const map = await this.client.getEventCategoryBatch([eventSlug]);
+      const cat = map.get(eventSlug) ?? null;
+      this.eventCategoryCache.set(eventSlug, cat);
+      return cat;
+    } catch (err) {
+      this.deps.logger.warn({ event: "event_category_error", eventSlug, err: String(err) });
+      return null; // not cached — retry on the next trade for this event
+    }
   }
 
   private async getMeta(conditionId: string): Promise<MarketMeta | null> {
